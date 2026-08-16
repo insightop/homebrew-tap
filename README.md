@@ -6,28 +6,29 @@ Insightop 组织自有 Homebrew tap，分发多个桌面应用的安装包（cas
 
 ```bash
 brew tap insightop/tap
-brew install studio
+brew install studio xianyu-seller-im
 ```
 
 ## 更新
 
 ```bash
-brew update && brew upgrade studio
+brew update && brew upgrade studio xianyu-seller-im
 ```
 
 ## 结构约定（多项目共用）
 
 ```
 Casks/
-├── studio.rb            # Studio 桌面端（macOS arm64）
+├── studio.rb            # Studio 桌面端（macOS arm64，CI 自动更新）
+├── xianyu-seller-im.rb  # 闲鱼卖家客服（第三方官方 App，手动维护）
 └── <未来项目>.rb         # 每项目一个 cask 文件
 
 .github/actions/render-cask/   # 共享 cask 渲染 action（各项目复用）
 ```
 
-- 每个项目在自己的 CI（GitHub Actions）中构建安装包，上传至 Cloudflare R2（vault 下载通道），并自动更新本仓库对应 cask 的 `version` / `sha256` / `url` 三字段
-- 本仓库**不手动维护** cask 文件内容，发布流程见各项目仓库的 `.github/workflows/`
-- cask 的 `url` 指向 vault 公开下载地址（302 → R2 签名 URL），`brew` 安装不触发 Gatekeeper quarantine
+- 自有项目（如 studio）在自己的 CI（GitHub Actions）中构建安装包，上传至 Cloudflare R2（vault 下载通道），并自动更新本仓库对应 cask 的 `version` / `sha256` / `url` 三字段，**不手动维护** cask 文件内容，发布流程见各项目仓库的 `.github/workflows/`
+- 第三方官方 App（如 xianyu-seller-im）无法自行构建，cask 指向官方下载源（sha256 固定校验），**手动维护**
+- 自有项目 cask 的 `url` 指向 vault 公开下载地址（302 → R2 签名 URL），`brew` 安装不触发 Gatekeeper quarantine
 
 ## 共享 render-cask action（其他项目复用）
 
