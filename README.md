@@ -51,7 +51,6 @@ Casks/
     app-name: <应用显示名>
     desc: <应用描述>          # 可选
     homepage: <项目主页>      # 可选
-    bundle-id: <bundle id>    # 可选
 
 - name: 提交并推送
   uses: stefanzweifel/git-auto-commit-action@v5

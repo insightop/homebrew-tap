@@ -1,6 +1,6 @@
 name: render-cask
 description: >-
-  渲染标准 Homebrew cask 文件（version / sha256 / url / bundle_id 等字段）。
+  渲染标准 Homebrew cask 文件（version / sha256 / url / desc / homepage 等标准 DSL 字段）。
   供各项目发布管线共用：项目 checkout 本 tap 仓库后以本地路径引用
   （uses: ./homebrew-tap/.github/actions/render-cask），随后用
   git-auto-commit-action 提交推送。
@@ -28,10 +28,6 @@ inputs:
     description: 项目主页（可选）
     required: false
     default: ""
-  bundle-id:
-    description: 应用 bundle id（可选）
-    required: false
-    default: ""
 runs:
   using: composite
   steps:
@@ -47,7 +43,6 @@ runs:
         APP_NAME="${{ inputs.app-name }}"
         DESC="${{ inputs.desc }}"
         HOMEPAGE="${{ inputs.homepage }}"
-        BUNDLE_ID="${{ inputs.bundle-id }}"
 
         # verified = 域名 + 目录前缀（Homebrew cask 规范：证明文件来自该站点）
         VERIFIED="$(printf '%s' "${URL}" | sed -E 's#^https?://([^/]+)/(.*)/[^/]+$#\1/\2/#')"
@@ -56,9 +51,6 @@ runs:
           echo "cask \"${TOKEN}\" do"
           echo "  version \"${VERSION}\""
           echo "  sha256 \"${SHA256}\""
-          if [ -n "${BUNDLE_ID}" ]; then
-            echo "  bundle_id \"${BUNDLE_ID}\""
-          fi
           echo ""
           echo "  url \"${URL}\","
           echo "      verified: \"${VERIFIED}\""
