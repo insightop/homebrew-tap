@@ -1,6 +1,7 @@
 cask "studio" do
   version "0.1.0-a1b2c3d"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  bundle_id "com.insightop.studio"
 
   url "https://vault.insightop.com/studio/darwin/Studio-#{version}-arm64.dmg",
       verified: "vault.insightop.com/studio/darwin/"

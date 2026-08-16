@@ -1,0 +1,77 @@
+name: render-cask
+description: >-
+  渲染标准 Homebrew cask 文件（version / sha256 / url / bundle_id 等字段）。
+  供各项目发布管线共用：项目 checkout 本 tap 仓库后以本地路径引用
+  （uses: ./homebrew-tap/.github/actions/render-cask），随后用
+  git-auto-commit-action 提交推送。
+inputs:
+  cask-path:
+    description: 目标 cask 文件路径（如 Casks/studio.rb；cask token 从文件名推导）
+    required: true
+  version:
+    description: cask 版本（如 0.1.0-a1b2c3d）
+    required: true
+  sha256:
+    description: 安装包 sha256
+    required: true
+  url:
+    description: 完整下载 URL（verified 字段自动从 URL 提取）
+    required: true
+  app-name:
+    description: 应用显示名（name 字段；app 行渲染为 <app-name>.app）
+    required: true
+  desc:
+    description: 应用描述（可选）
+    required: false
+    default: ""
+  homepage:
+    description: 项目主页（可选）
+    required: false
+    default: ""
+  bundle-id:
+    description: 应用 bundle id（可选）
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+
+        CASK_PATH="${{ inputs.cask-path }}"
+        TOKEN="$(basename "${CASK_PATH}" .rb)"
+        VERSION="${{ inputs.version }}"
+        SHA256="${{ inputs.sha256 }}"
+        URL="${{ inputs.url }}"
+        APP_NAME="${{ inputs.app-name }}"
+        DESC="${{ inputs.desc }}"
+        HOMEPAGE="${{ inputs.homepage }}"
+        BUNDLE_ID="${{ inputs.bundle-id }}"
+
+        # verified = 域名 + 目录前缀（Homebrew cask 规范：证明文件来自该站点）
+        VERIFIED="$(printf '%s' "${URL}" | sed -E 's#^https?://([^/]+)/(.*)/[^/]+$#\1/\2/#')"
+
+        {
+          echo "cask \"${TOKEN}\" do"
+          echo "  version \"${VERSION}\""
+          echo "  sha256 \"${SHA256}\""
+          if [ -n "${BUNDLE_ID}" ]; then
+            echo "  bundle_id \"${BUNDLE_ID}\""
+          fi
+          echo ""
+          echo "  url \"${URL}\","
+          echo "      verified: \"${VERIFIED}\""
+          echo "  name \"${APP_NAME}\""
+          if [ -n "${DESC}" ]; then
+            echo "  desc \"${DESC}\""
+          fi
+          if [ -n "${HOMEPAGE}" ]; then
+            echo "  homepage \"${HOMEPAGE}\""
+          fi
+          echo ""
+          echo "  app \"${APP_NAME}.app\""
+          echo "end"
+        } > "${CASK_PATH}"
+
+        echo "已渲染 cask: ${CASK_PATH} (token=${TOKEN}, version=${VERSION})"
