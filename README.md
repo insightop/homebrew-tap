@@ -12,23 +12,28 @@ brew install studio xianyu-seller-im
 ## 更新
 
 ```bash
-brew update && brew upgrade studio xianyu-seller-im
+# latest 模式（studio：cask 固定，--greedy 强制重拉最新）
+brew upgrade --cask --greedy studio
+
+# 固定版本模式（xianyu-seller-im 等：普通升级语义）
+brew upgrade --cask xianyu-seller-im
 ```
 
 ## 结构约定（多项目共用）
 
 ```
 Casks/
-├── studio.rb            # Studio 桌面端（macOS arm64，CI 自动更新）
-├── xianyu-seller-im.rb  # 闲鱼卖家客服（第三方官方 App，手动维护）
+├── studio.rb            # Studio 桌面端（macOS arm64，latest 模式：version :latest + sha256 :no_check + 固定 ?latest URL）
+├── xianyu-seller-im.rb  # 闲鱼卖家客服（第三方官方 App，固定版本，手动维护）
 └── <未来项目>.rb         # 每项目一个 cask 文件
 
-.github/actions/render-cask/   # 共享 cask 渲染 action（各项目复用）
+.github/actions/render-cask/   # 共享 cask 渲染 action（固定版本模式的项目复用）
 ```
 
-- 自有项目（如 studio）在自己的 CI（GitHub Actions）中构建安装包，上传至 Cloudflare R2（vault 下载通道），并自动更新本仓库对应 cask 的 `version` / `sha256` / `url` 三字段，**不手动维护** cask 文件内容，发布流程见各项目仓库的 `.github/workflows/`
-- 第三方官方 App（如 xianyu-seller-im）无法自行构建，cask 指向官方下载源（sha256 固定校验），**手动维护**
-- 自有项目 cask 的 `url` 指向 vault 公开下载地址（302 → R2 签名 URL），`brew` 安装不触发 Gatekeeper quarantine
+- **自有项目（latest 模式）**：如 studio——cask 固定指向 vault 的 `?latest` 端点（vault 302 到最新 dmg），`version :latest` + `sha256 :no_check`，**tap 永不随发布更新**，各项目 CI 只需构建 + 上传 R2
+- **自有项目（固定版本模式）**：可在 CI 中用共享 render-cask action 更新 cask 的 version/sha256/url（见下）
+- **第三方官方 App**（如 xianyu-seller-im）：无法自行构建，cask 指向官方下载源（sha256 固定校验），**手动维护**
+- `brew` 安装不触发 Gatekeeper quarantine（vault 下载无 quarantine 属性）
 
 ## 共享 render-cask action（其他项目复用）
 
@@ -61,10 +66,6 @@ Casks/
 ```
 
 `verified` 字段由 action 自动从 `url` 提取（域名 + 目录前缀），无需手动指定。
-
-## 首次发布前
-
-首个版本发布前，本仓库 cask 中的 `version` / `sha256` / `url` 为占位值；首次 CI 发布成功后自动替换为真实值。
 
 ## 维护
 
