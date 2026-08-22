@@ -12,7 +12,7 @@ cask "boya-central" do
     skip "Versioned URL with no public version feed"
   end
 
-  depends_on macos: ">= :monterey"  # Info.plist LSMinimumSystemVersion 12.4
+  depends_on macos: :monterey  # Info.plist LSMinimumSystemVersion 12.4
 
   # pkg 内含两个子包：主程序 com.boyaCentral.BOYA.Appcn（BOYA Central.app）
   # 与 CoreAudio 驱动 com.boyaCentral.BOYA.Driver（BOYARouterDevice.driver）
