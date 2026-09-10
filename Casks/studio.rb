@@ -9,4 +9,13 @@ cask "studio" do
   homepage "https://github.com/insightop/studio"
 
   app "Studio.app"
+
+  # 未公证 App：安装后移除 quarantine 属性，避免 Gatekeeper 弹"无法验证"警告。
+  # 用 #{appdir} 自动适配每台电脑不同的安装目录（默认 /Applications，
+  # 可用 HOMEBREW_CASK_OPTS="--appdir=..." 覆盖）。
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Studio.app"],
+                   sudo: false
+  end
 end
