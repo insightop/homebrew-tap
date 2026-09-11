@@ -2,8 +2,7 @@ cask "boya-central" do
   version "1.1.1"
   sha256 "da435700b2b28b35a022d35ef0e30b24e5d95583782feb53e7b0eab6b5f0722b"
 
-  url "https://oss.boyamic.com/app/BOYACentral-#{version}.pkg",
-      verified: "oss.boyamic.com/app/"
+  url "https://oss.boyamic.com/app/BOYACentral-#{version}.pkg"
   name "BOYA Central"
   desc "Desktop companion app for BOYA microphones"
   homepage "https://www.boyamic.com/"
