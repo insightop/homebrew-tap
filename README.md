@@ -6,7 +6,7 @@ Insightop 组织自有 Homebrew tap，分发多个桌面应用的安装包（cas
 
 ```bash
 brew tap insightop/tap
-brew install studio xianyu-seller-im boya-central dsh-desktop
+brew install studio xianyu-seller-im boya-central dsh-desktop pixso
 ```
 
 ## 更新
@@ -15,8 +15,8 @@ brew install studio xianyu-seller-im boya-central dsh-desktop
 # latest 模式（studio：cask 固定，--greedy 强制重拉最新）
 brew upgrade --cask --greedy studio
 
-# 固定版本模式（xianyu-seller-im、boya-central、dsh-desktop 等：普通升级语义）
-brew upgrade --cask xianyu-seller-im boya-central dsh-desktop
+# 固定版本模式（xianyu-seller-im、boya-central、dsh-desktop、pixso 等：普通升级语义）
+brew upgrade --cask xianyu-seller-im boya-central dsh-desktop pixso
 ```
 
 ## 结构约定（多项目共用）
@@ -27,6 +27,7 @@ Casks/
 ├── xianyu-seller-im.rb  # 闲鱼卖家客服（第三方官方 App，固定版本，手动维护）
 ├── boya-central.rb      # BOYA Central（博雅麦克风桌面端，pkg 安装器含驱动，手动维护）
 ├── dsh-desktop.rb       # DSH Desktop（DeepSeek 桌面端，GitHub Releases，手动维护）
+├── pixso.rb             # Pixso（博思云创协同设计，官方 homebrew-cask 暂无，手动维护）
 └── <未来项目>.rb         # 每项目一个 cask 文件
 
 .github/actions/render-cask/   # 共享 cask 渲染 action（固定版本模式的项目复用）
