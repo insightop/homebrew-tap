@@ -1,0 +1,148 @@
+name: Update Casks
+
+on:
+  schedule:
+    # 每周一凌晨 4:00 UTC（北京时间周一 12:00）检测一次
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      cask:
+        description: 只检测指定 cask（留空则检测全部）
+        required: false
+        type: choice
+        default: ""
+        options:
+          - ""
+          - boya-central
+          - xianyu-seller-im
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# 避免上一次定时任务未结束时重复开跑（两个矩阵任务共用同一 concurrency 组）
+concurrency:
+  group: update-casks
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # 两个 cask 的版本探测都依赖 macOS 自带命令：
+    #   boya   → pkgutil --expand-full / plutil / spctl
+    #   xianyu → hdiutil（挂载 dmg 读 Info.plist）
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cask: boya-central
+            script: scripts/update-boya.rb
+            file: Casks/boya-central.rb
+            source: 官网下载页 https://www.boyamic.com/support/download
+            extra: 已校验 Apple 签名与公证，并核对包内 App 版本
+          - cask: xianyu-seller-im
+            script: scripts/update-xianyu.rb
+            file: Casks/xianyu-seller-im.rb
+            source: 官方 OSS 分发目录的文件名探测（该 App 无版本清单/更新接口）
+            extra: 已核对包内 App 版本（mac 与 win 包需成对存在才认定为正式发布）
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Detect & update
+        id: detect
+        # 脚本自身决定是否下载；仅在有新版时修改对应的 cask 文件
+        run: |
+          set -euo pipefail
+
+          want="${{ github.event.inputs.cask || '' }}"
+          if [[ -n "$want" && "$want" != "${{ matrix.cask }}" ]]; then
+            echo "本次手动触发未选中 ${{ matrix.cask }}，跳过"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+          out="$(ruby "${{ matrix.script }}")"
+          printf '%s\n' "$out"
+
+          echo "new_version=$(printf '%s\n' "$out" | sed -n 's/^new_version=//p')" >> "$GITHUB_OUTPUT"
+
+          # BOYA 脚本在上游 pkg 标识漂移时会改写 uninstall pkgutil，需在 PR 里高亮
+          notes=""
+          if printf '%s\n' "$out" | grep -qx 'pkgutil_changed=true'; then
+            actual="$(printf '%s\n' "$out" | sed -n 's/^pkgutil_actual=//p')"
+            notes="⚠️ **上游 pkg 标识发生漂移**，已自动改写 \`uninstall pkgutil\` 为 \`${actual}\`。卸载依赖该列表，请重点复核。"
+          fi
+          {
+            echo "notes<<__NOTES_EOF__"
+            echo "$notes"
+            echo "__NOTES_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+          if git diff --quiet --exit-code "${{ matrix.file }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report no update
+        if: steps.detect.outputs.skipped != 'true' && steps.detect.outputs.changed != 'true'
+        run: echo "${{ matrix.cask }} 已是最新版本，无需更新"
+
+      - name: Commit & open PR
+        if: steps.detect.outputs.skipped != 'true' && steps.detect.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CASK: ${{ matrix.cask }}
+          FILE: ${{ matrix.file }}
+          SOURCE: ${{ matrix.source }}
+          EXTRA: ${{ matrix.extra }}
+          NEW_VERSION: ${{ steps.detect.outputs.new_version }}
+          NOTES: ${{ steps.detect.outputs.notes }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          branch="ci/${CASK}-${NEW_VERSION}"
+          # 分支已存在（上次运行留下的未合并 PR）则复用，否则新建；均指向最新 main + 本次改动
+          if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null 2>&1; then
+            git checkout -B "$branch" origin/main
+          else
+            git checkout -b "$branch" origin/main
+          fi
+          git add "$FILE"
+          git commit -m "chore: update ${CASK} to ${NEW_VERSION}"
+          git push --force-with-lease origin "$branch"
+
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            echo "PR already exists, skip"
+            exit 0
+          fi
+
+          {
+            echo "自动检测到 **${CASK}** 新版本 \`${NEW_VERSION}\`。"
+            echo
+            echo "- 版本来源：${SOURCE}"
+            echo "- ${EXTRA}"
+            if [[ -n "$NOTES" ]]; then
+              echo "- ${NOTES}"
+            fi
+            echo
+            echo "请人工确认后手动合并。"
+            echo
+            echo "由 \`update-casks\` workflow 自动创建。"
+          } > /tmp/pr-body.md
+
+          gh pr create \
+            --title "chore: update ${CASK} to ${NEW_VERSION}" \
+            --body-file /tmp/pr-body.md \
+            --base main \
+            --head "$branch"
