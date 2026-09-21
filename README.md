@@ -30,7 +30,15 @@ Casks/
 ├── pixso.rb             # Pixso（博思云创协同设计，官方 homebrew-cask 暂无，自动检测：官方更新通道）
 └── <未来项目>.rb         # 每项目一个 cask 文件
 
-.github/actions/render-cask/   # 共享 cask 渲染 action（固定版本模式的项目复用）
+scripts/
+├── lib/cask_update.rb   # 共享库：7-Zip 定位/版本校验、plist 解析、dmg 内版本、cask 改写
+└── update-<cask>.rb     # 每个 cask 一个探测脚本（pixso / dsh / xianyu / boya）
+
+.github/
+├── actions/render-cask/        # 共享 cask 渲染 action（固定版本模式的项目复用）
+└── workflows/
+    ├── update-casks.yml        # 统一入口：四个 cask 各一个 job
+    └── update-cask.yml         # 可复用工作流：单个 cask 的检测 → 开 PR
 ```
 
 - **自有项目（latest 模式）**：如 studio——cask 固定指向 vault 的 `?latest` 端点（vault 302 到最新 dmg），`version :latest` + `sha256 :no_check`，**tap 永不随发布更新**，各项目 CI 只需构建 + 上传 R2
@@ -40,25 +48,33 @@ Casks/
 
 ## 自动检测新版本
 
-第三方 App 没有发布钩子，因此用定时任务每周探测上游并开 PR（`main` 仍由人工合并，不做自动推送）。
+第三方 App 没有发布钩子，因此用定时任务每天探测上游并开 PR（`main` 仍由人工合并，不做自动推送）。
 
-| cask | 版本来源 | 检测方式 |
-| --- | --- | --- |
-| `pixso` | 官方 electron-updater 通道 `api.pixso.cn/api/upgrade/desktop/bosyun/latest-mac.yml` | 结构化 YAML + 官方 sha512 校验 |
-| `dsh-desktop` | GitHub Releases 的 `/releases/latest` | `livecheck`（`:github_latest`）+ `scripts/update-dsh.rb` |
-| `boya-central` | 官网下载页 `boyamic.com/support/download`（服务端渲染） | `livecheck` 正则 + `scripts/update-boya.rb` |
-| `xianyu-seller-im` | 官方 OSS 分发目录 `xianyu/seller/commonpro/` | `scripts/update-xianyu.rb` 文件名窗口探测 |
+**统一入口**：`.github/workflows/update-casks.yml`（每天 04:00 UTC / 北京时间 12:00）。
+每个 cask 是一个**独立 job**（非 matrix），单个失败不影响其它、可单独重跑；手动触发时可只跑其中一个。
+探测逻辑抽在可复用的 `.github/workflows/update-cask.yml` 里，四个 job 只声明各自差异。
 
-- **工作流**：`.github/workflows/update-casks.yml`（每周一 04:00 UTC，`macos-latest`），与 `.github/workflows/update-pixso.yml` 相互独立
-- **可手动触发**：Actions → Update Casks → Run workflow，可只跑单个 cask
+| cask | 版本来源 | 检测方式 | runner |
+| --- | --- | --- | --- |
+| `pixso` | 官方 electron-updater 通道 `api.pixso.cn/.../latest-mac.yml` | 结构化 YAML + 官方 sha512 校验 | ubuntu |
+| `dsh-desktop` | GitHub Releases 的 `/releases/latest` | `livecheck`（`:github_latest`）+ `scripts/update-dsh.rb` | ubuntu |
+| `xianyu-seller-im` | 官方 OSS 分发目录 `xianyu/seller/commonpro/` | `scripts/update-xianyu.rb` 文件名窗口探测 | ubuntu |
+| `boya-central` | 官网下载页 `boyamic.com/support/download`（服务端渲染） | `livecheck` 正则 + `scripts/update-boya.rb` | **macOS** |
+
+**runner 分配原则：能做到的用 ubuntu，有平台限制的才用 macOS。** 本仓库为 public，两类标准 runner 均免费（[GitHub 计费文档](https://docs.github.com/en/billing/concepts/product-billing/github-actions)）。
+只有 `boya-central` 必须在 macOS 上跑——它要校验 pkg 的 Apple 签名与公证（`pkgutil --check-signature`、`spctl`），这两个是 macOS 专有命令，而该 pkg 会安装系统级音频驱动，签名校验不能省。
+其余三个用 ubuntu：读 dmg 统一走 7-Zip（**需 >= 22.00**，自 22.00 起支持 APFS；Ubuntu 上装 apt 的 `7zip`，勿用 `p7zip-full` 的 16.02），解析 plist 用 Ruby 标准库而非 macOS 的 `plutil`。
+
+- **可手动触发**：Actions → Update Casks → Run workflow，`cask` 选 `all` 或单个
 - **人工核对**：`brew livecheck --tap insightop/tap`。`dsh-desktop` 与 `boya-central` 走真实 livecheck；`xianyu-seller-im` 与 `pixso` 因上游无可用版本源而显式 `skip`
 - **本地自检**（强制全链路下载校验、不改文件）：
   ```bash
+  PIXSO_VERIFY=1  ruby scripts/update-pixso.rb
   DSH_VERIFY=1    ruby scripts/update-dsh.rb
-  BOYA_VERIFY=1   ruby scripts/update-boya.rb
   XIANYU_VERIFY=1 ruby scripts/update-xianyu.rb
+  BOYA_VERIFY=1   ruby scripts/update-boya.rb    # 仅 macOS
   ```
-- **脚本需在 macOS 上运行**（依赖 `pkgutil` / `plutil` / `spctl` / `hdiutil`）
+- **共享库**：`scripts/lib/cask_update.rb`（7-Zip 定位与版本校验、plist 解析、dmg 内版本读取、cask 改写、下载/清理）
 
 ### 各自的探测要点与风险
 
