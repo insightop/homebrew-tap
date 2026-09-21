@@ -44,7 +44,45 @@ scripts/
 - **自有项目（latest 模式）**：如 studio——cask 固定指向 vault 的 `?latest` 端点（vault 302 到最新 dmg），`version :latest` + `sha256 :no_check`，**tap 永不随发布更新**，各项目 CI 只需构建 + 上传 R2
 - **自有项目（固定版本模式）**：可在 CI 中用共享 render-cask action 更新 cask 的 version/sha256/url（见下）
 - **第三方官方 App**（如 xianyu-seller-im、boya-central、pixso、dsh-desktop）：无法自行构建，cask 指向官方下载源（sha256 固定校验）。**已接入自动检测**（见下节），由定时任务开 PR、人工合并
-- `brew` 安装不触发 Gatekeeper quarantine（vault 下载无 quarantine 属性）
+
+## 未公证 App 的 Gatekeeper 处理
+
+Homebrew 下载安装包后会打上 `com.apple.quarantine` 隔离标记。若上游只做了 Developer ID 签名、**未做 Apple 公证**，首次启动会被 Gatekeeper 拦下并弹「无法验证开发者」。
+
+本 tap 对这类 App 在 cask 里用 `postflight_steps` 清掉该标记（安装后执行）：
+
+```ruby
+app "Xxx.app"
+
+postflight_steps do
+  run "/usr/bin/xattr",
+      args: ["-dr", "com.apple.quarantine", "{{appdir}}/Xxx.app"],
+      sudo: false
+end
+```
+
+`{{appdir}}` 由 Homebrew 在安装时展开（默认 `/Applications`，可用 `HOMEBREW_CASK_OPTS="--appdir=..."` 覆盖），因此中文/带空格的 App 名同样适用。
+
+**判定某个 cask 是否需要它**（`Notarized` 则不需要）：
+
+```bash
+brew install --cask <token>          # 或挂载上游 dmg 后对 .app 执行：
+spctl -a -vvv -t exec /Applications/Xxx.app
+# accepted                    → 已公证，无需处理
+# rejected / Unnotarized      → 未公证，需加 postflight_steps
+```
+
+当前状态：
+
+| cask | 上游公证 | 处理 |
+| --- | --- | --- |
+| `studio` | 未公证 | 已有 `postflight_steps` |
+| `xianyu-seller-im` | 未公证 | 已有 `postflight_steps` |
+| `dsh-desktop` | 已公证 | 不需要 |
+| `boya-central` | 已公证（pkg） | 不需要 |
+| `pixso` | 已公证 | 不需要 |
+
+> 清 quarantine 只去掉下载来源的隔离标记，**不影响代码签名校验**（`codesign --verify` 仍通过）；它解决的是「未公证导致的首次启动弹窗」，不是绕过签名验证。
 
 ## 自动检测新版本
 

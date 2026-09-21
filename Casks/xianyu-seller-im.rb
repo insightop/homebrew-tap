@@ -19,5 +19,20 @@ cask "xianyu-seller-im" do
 
   app "闲鱼卖家客服.app"
 
+  # 未公证 App：上游只有 Developer ID 签名、未做 Apple 公证（1.0.4 与 1.2.0 均如此，
+  # 非某个版本引入）。Homebrew 下载后会打上 com.apple.quarantine，首次启动时
+  # Gatekeeper 弹「无法验证开发者」。这里在安装后移除该属性，避免弹窗。
+  #
+  # 说明：移除 quarantine 只是跳过后加的隔离标记，**不影响签名完整性校验**
+  # （xattr 与代码签名无关，codesign --verify 仍通过）。这是本 tap 中自研 App
+  # （studio）既有的做法。
+  # {{appdir}} 会自动适配每台电脑的安装目录（默认 /Applications，
+  # 可用 HOMEBREW_CASK_OPTS="--appdir=..." 覆盖）。
+  postflight_steps do
+    run "/usr/bin/xattr",
+        args: ["-dr", "com.apple.quarantine", "{{appdir}}/闲鱼卖家客服.app"],
+        sudo: false
+  end
+
   zap trash: "~/Library/Application Support/xianyu-seller-im"
 end
