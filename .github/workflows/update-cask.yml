@@ -1,0 +1,193 @@
+name: Update Cask
+
+# 可复用工作流：检测单个 cask 是否有新版，有则开 PR。
+# 由 .github/workflows/update-casks.yml 统一调用，也可单独 `gh workflow run`。
+#
+# 设计要点：
+#   - runner 由调用方指定：需要 macOS 专有命令的（boya 的签名校验）用 macos，
+#     其余用 ubuntu（更省）。
+#   - 脚本自身决定是否下载安装包；无新版则安静退出，不开 PR。
+#   - 仅开 PR，不做自动推送；main 由人工合并。
+
+on:
+  workflow_call:
+    inputs:
+      cask:
+        description: cask token（如 boya-central）
+        required: true
+        type: string
+      script:
+        description: 检测脚本路径（如 scripts/update-boya.rb）
+        required: true
+        type: string
+      file:
+        description: 待更新的 cask 文件路径（如 Casks/boya-central.rb）
+        required: true
+        type: string
+      runner:
+        description: runner 标签（macos-latest / ubuntu-latest）
+        required: true
+        type: string
+      source:
+        description: PR 描述里展示的版本来源
+        required: true
+        type: string
+      extra:
+        description: PR 描述里展示的补充校验说明
+        required: false
+        type: string
+        default: ""
+      needs_seven_zip:
+        description: 是否需要安装 7-Zip 23+（读 dmg；Ubuntu 自带的 p7zip 16.02 不支持 APFS）
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      # 需要 >= 22.00 的 7-Zip 才能读 APFS dmg。
+      # 注意 Ubuntu 上 `p7zip-full` 是 transitional 包、实际依赖 `7zip`（23.01，提供 7z），
+      # 但也可能残留仅 16.02 的 p7zip，故这里统一校验版本，不合格就装 `7zip`。
+      - name: Ensure 7-Zip >= 22.00
+        if: inputs.needs_seven_zip
+        run: |
+          set -euo pipefail
+          seven_zip_ok() {
+            for c in 7zz 7z 7za; do
+              command -v "$c" >/dev/null 2>&1 || continue
+              # 版本号形如 "7-Zip [64] 17.05" 或 "7-Zip (z) 25.01"。
+              # 只取含小数点的数字，可自然跳过架构标记 [64]（它没有点）。
+              v="$("$c" 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+              [[ -n "$v" ]] || continue
+              # 用 Ruby 比较版本（macOS/Linux 通用；dpkg 仅 Linux 有）
+              if ruby -e 'exit(Gem::Version.new(ARGV[0]) >= Gem::Version.new("22.00") ? 0 : 1)' "$v"; then
+                echo "可用: $c $v"
+                return 0
+              fi
+              echo "跳过 $c：版本 $v 过旧（读 APFS dmg 需 >= 22.00）"
+            done
+            return 1
+          }
+          if seven_zip_ok; then
+            exit 0
+          fi
+          echo "未找到 >= 22.00 的 7-Zip，安装 apt 的 7zip ..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq 7zip
+          seven_zip_ok || { echo "安装后仍不满足，请检查 runner 镜像"; exit 1; }
+
+      - name: Detect & update
+        id: detect
+        env:
+          # 供 dsh 脚本查 GitHub API（避免匿名限流）；其余脚本不使用
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          out="$(ruby "${{ inputs.script }}")"
+          printf '%s\n' "$out"
+
+          echo "new_version=$(printf '%s\n' "$out" | sed -n 's/^new_version=//p')" >> "$GITHUB_OUTPUT"
+
+          # 需要人工重点复核的漂移类改动，逐条收集后在 PR 描述里高亮
+          notes=""
+          add_note() {
+            if [[ -n "$notes" ]]; then
+              notes="${notes}"$'\n'"$1"
+            else
+              notes="$1"
+            fi
+          }
+          # BOYA：上游 pkg 标识漂移 → 已改写 uninstall pkgutil
+          if printf '%s\n' "$out" | grep -qx 'pkgutil_changed=true'; then
+            actual="$(printf '%s\n' "$out" | sed -n 's/^pkgutil_actual=//p')"
+            add_note "⚠️ **上游 pkg 标识发生漂移**，已自动改写 \`uninstall pkgutil\` 为 \`${actual}\`。卸载依赖该列表，请重点复核。"
+          fi
+          # DSH：上游资产改名 → 已改写 cask 的 url
+          if printf '%s\n' "$out" | grep -qx 'url_changed=true'; then
+            add_note "⚠️ **上游发布资产已改名**，已自动同步修正 cask 的 \`url\`。请确认新 URL 可正常下载。"
+          fi
+          {
+            echo "notes<<__NOTES_EOF__"
+            echo "$notes"
+            echo "__NOTES_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+          if git diff --quiet --exit-code "${{ inputs.file }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report no update
+        if: steps.detect.outputs.changed != 'true'
+        run: echo "${{ inputs.cask }} 已是最新版本，无需更新"
+
+      - name: Commit & open PR
+        if: steps.detect.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CASK: ${{ inputs.cask }}
+          FILE: ${{ inputs.file }}
+          SOURCE: ${{ inputs.source }}
+          EXTRA: ${{ inputs.extra }}
+          NEW_VERSION: ${{ steps.detect.outputs.new_version }}
+          NOTES: ${{ steps.detect.outputs.notes }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          branch="ci/${CASK}-${NEW_VERSION}"
+          # 分支已存在（上次运行留下的未合并 PR）则复用，否则新建；均指向最新 main + 本次改动
+          if git ls-remote --exit-code origin "refs/heads/$branch" >/dev/null 2>&1; then
+            git checkout -B "$branch" origin/main
+          else
+            git checkout -b "$branch" origin/main
+          fi
+          git add "$FILE"
+          git commit -m "chore: update ${CASK} to ${NEW_VERSION}"
+          git push --force-with-lease origin "$branch"
+
+          if gh pr view "$branch" --json number >/dev/null 2>&1; then
+            echo "PR already exists, skip"
+            exit 0
+          fi
+
+          {
+            echo "自动检测到 **${CASK}** 新版本 \`${NEW_VERSION}\`。"
+            echo
+            echo "- 版本来源：${SOURCE}"
+            if [[ -n "$EXTRA" ]]; then
+              echo "- ${EXTRA}"
+            fi
+            if [[ -n "$NOTES" ]]; then
+              while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "- ${line}"
+              done <<< "$NOTES"
+            fi
+            echo
+            echo "请人工确认后手动合并。"
+            echo
+            echo "由 \`update-casks\` workflow 自动创建。"
+          } > /tmp/pr-body.md
+
+          gh pr create \
+            --title "chore: update ${CASK} to ${NEW_VERSION}" \
+            --body-file /tmp/pr-body.md \
+            --base main \
+            --head "$branch"
