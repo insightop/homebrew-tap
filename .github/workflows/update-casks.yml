@@ -14,6 +14,7 @@ on:
         options:
           - ""
           - boya-central
+          - dsh-desktop
           - xianyu-seller-im
 
 permissions:
@@ -27,8 +28,9 @@ concurrency:
 
 jobs:
   update:
-    # 两个 cask 的版本探测都依赖 macOS 自带命令：
+    # 三个 cask 的版本探测都依赖 macOS 自带命令：
     #   boya   → pkgutil --expand-full / plutil / spctl
+    #   dsh    → hdiutil（挂载 dmg 读 Info.plist）
     #   xianyu → hdiutil（挂载 dmg 读 Info.plist）
     runs-on: macos-latest
     strategy:
@@ -40,6 +42,11 @@ jobs:
             file: Casks/boya-central.rb
             source: 官网下载页 https://www.boyamic.com/support/download
             extra: 已校验 Apple 签名与公证，并核对包内 App 版本
+          - cask: dsh-desktop
+            script: scripts/update-dsh.rb
+            file: Casks/dsh-desktop.rb
+            source: GitHub Releases 的 `/releases/latest`（排除 prerelease）
+            extra: 已核对包内 App 版本；资产改名时会自动同步修正 cask 的 url
           - cask: xianyu-seller-im
             script: scripts/update-xianyu.rb
             file: Casks/xianyu-seller-im.rb
@@ -57,6 +64,9 @@ jobs:
       - name: Detect & update
         id: detect
         # 脚本自身决定是否下载；仅在有新版时修改对应的 cask 文件
+        env:
+          # dsh 脚本查 GitHub API；带 token 可避免匿名限流（60 次/小时/IP）
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -74,11 +84,23 @@ jobs:
 
           echo "new_version=$(printf '%s\n' "$out" | sed -n 's/^new_version=//p')" >> "$GITHUB_OUTPUT"
 
-          # BOYA 脚本在上游 pkg 标识漂移时会改写 uninstall pkgutil，需在 PR 里高亮
+          # 需要人工重点复核的漂移类改动，在 PR 描述里逐条高亮
           notes=""
+          add_note() {
+            if [[ -n "$notes" ]]; then
+              notes="${notes}"$'\n'"$1"
+            else
+              notes="$1"
+            fi
+          }
+          # BOYA：上游 pkg 标识漂移 → 已改写 uninstall pkgutil
           if printf '%s\n' "$out" | grep -qx 'pkgutil_changed=true'; then
             actual="$(printf '%s\n' "$out" | sed -n 's/^pkgutil_actual=//p')"
-            notes="⚠️ **上游 pkg 标识发生漂移**，已自动改写 \`uninstall pkgutil\` 为 \`${actual}\`。卸载依赖该列表，请重点复核。"
+            add_note "⚠️ **上游 pkg 标识发生漂移**，已自动改写 \`uninstall pkgutil\` 为 \`${actual}\`。卸载依赖该列表，请重点复核。"
+          fi
+          # DSH：上游资产改名 → 已改写 cask 的 url
+          if printf '%s\n' "$out" | grep -qx 'url_changed=true'; then
+            add_note "⚠️ **上游发布资产已改名**，已自动同步修正 cask 的 \`url\`。请确认新 URL 可正常下载。"
           fi
           {
             echo "notes<<__NOTES_EOF__"
@@ -133,7 +155,10 @@ jobs:
             echo "- 版本来源：${SOURCE}"
             echo "- ${EXTRA}"
             if [[ -n "$NOTES" ]]; then
-              echo "- ${NOTES}"
+              # NOTES 可能含多条（每行一条），逐行渲染成列表项
+              while IFS= read -r line; do
+                [[ -n "$line" ]] && echo "- ${line}"
+              done <<< "$NOTES"
             fi
             echo
             echo "请人工确认后手动合并。"
