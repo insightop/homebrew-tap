@@ -19,30 +19,29 @@
 #   4. 改写 cask 的 version / sha256；若 pkg 标识漂移，同步改写 uninstall pkgutil 列表
 #   5. 输出 new_version=… 与 pkgutil_changed=… 供 workflow 开 PR
 #
+# 为什么这个脚本必须跑 macOS（CI 用 macos runner，不像其它三个走 ubuntu）：
+#   校验 pkg 的 Apple 签名与公证要用 `pkgutil --check-signature` 与 `spctl`，
+#   这两者是 macOS 专有命令，Linux 上没有等价物。该 pkg 还会安装系统级音频驱动
+#   （/Library/Audio/Plug-Ins/HAL），签名校验在这里不是形式主义。
+#
 # 环境变量（本地调试用）：
 #   BOYA_VERIFY=1      即使版本相同也强制下载并校验（不修改文件），用于本地验证全链路
 #   BOYA_KEEP_TMP=1    保留临时目录（含下载的 pkg 与展开结果），便于排查
-#
-# 注意：本脚本依赖 macOS 自带命令（pkgutil / plutil / spctl），必须在 macOS 上运行。
 
-require "open-uri"
-require "digest"
-require "fileutils"
-require "tmpdir"
+require_relative "lib/cask_update"
 require "open3"
 
 PAGE_URL = "https://www.boyamic.com/support/download"
 VERSION_RE = %r{BOYACentral[._-]v?(\d+(?:\.\d+)+)\.pkg}i
 CASK = File.expand_path("../Casks/boya-central.rb", __dir__)
-OPEN_OPTS = { read_timeout: 300 }.freeze
 
 def log(msg)
-  warn "[update-boya] #{msg}"
+  CaskUpdate.log(msg)
 end
 
 # 抓官网下载页，提取最新版本号
 def fetch_latest_version
-  html = URI.open(PAGE_URL, **OPEN_OPTS).read
+  html = URI.open(PAGE_URL, read_timeout: 300).read
   version = html[VERSION_RE, 1]
   raise "官网下载页未匹配到 BOYACentral-<version>.pkg（页面结构可能已改版）" if version.nil?
 
@@ -53,21 +52,9 @@ end
 
 # 读当前 cask 的 version / sha256 / uninstall pkgutil 标识
 def current_cask
-  text = File.read(CASK)
-  version = text[/^  version\s+"([^"]+)"/, 1]
-  sha256 = text[/^  sha256\s+"([^"]+)"/, 1]
-  raise "Casks/boya-central.rb 解析失败（version/sha256 缺失）" if version.nil? || sha256.nil?
-
-  pkgutil = text[/uninstall pkgutil: \[(.*?)\]/m, 1].to_s.scan(/"([^"]+)"/).flatten
-  { version: version, sha256: sha256, pkgutil: pkgutil, text: text }
-end
-
-def download(url, dest)
-  log "下载 #{url}"
-  URI.open(url, **OPEN_OPTS) do |io|
-    File.open(dest, "wb") { |f| IO.copy_stream(io, f) }
-  end
-  File.size(dest)
+  base = CaskUpdate.read_cask(CASK)
+  pkgutil = base[:text][/uninstall pkgutil: \[(.*?)\]/m, 1].to_s.scan(/"([^"]+)"/).flatten
+  base.merge(pkgutil: pkgutil)
 end
 
 # 校验 Apple 签名链与公证；pkg 未通过则直接失败，避免把可疑包写进 cask
@@ -92,12 +79,11 @@ def inspect_pkg(pkg_path, workdir)
   info_plist = Dir.glob(File.join(expand_dir, "**", "Payload", "BOYA Central.app", "Contents", "Info.plist")).first
   raise "展开后未找到 BOYA Central.app/Contents/Info.plist（包结构可能已变）" if info_plist.nil?
 
-  plist_out, pl_status = Open3.capture2e("plutil", "-p", info_plist)
-  raise "plutil 读取 Info.plist 失败" unless pl_status.success?
-
-  app_version = plist_out[/"CFBundleShortVersionString"\s*=>\s*"([^"]+)"/, 1]
-  bundle_id = plist_out[/"CFBundleIdentifier"\s*=>\s*"([^"]+)"/, 1]
-  raise "未能从 Info.plist 解析 CFBundleShortVersionString" if app_version.nil?
+  # 复用共享库的 plist 解析（基于 REXML，不依赖 macOS 的 plutil）
+  info = CaskUpdate.parse_plist(File.read(info_plist))
+  app_version = info["CFBundleShortVersionString"]
+  bundle_id = info["CFBundleIdentifier"]
+  raise "未能从 Info.plist 解析 CFBundleShortVersionString" if app_version.nil? || app_version.empty?
 
   # 每个子包一个 PackageInfo，identifier= 即安装后 pkgutil receipt 的标识
   identifiers = Dir.glob(File.join(expand_dir, "*.pkg", "PackageInfo")).sort.map do |pi|
@@ -110,9 +96,6 @@ end
 
 # 精准替换 version / sha256 两行，以及（必要时）uninstall pkgutil 列表
 def rewrite_cask(text, version:, sha256:, pkgutil: nil)
-  text = text.sub(/^  version\s+"[^"]+"/) { %(  version "#{version}") }
-  text = text.sub(/^  sha256\s+"[^"]+"/)  { %(  sha256 "#{sha256}") }
-
   unless pkgutil.nil? || pkgutil.empty?
     body = pkgutil.map { |id| %(    "#{id}",\n) }.join
     rewritten = text.sub(/(uninstall pkgutil: \[\n).*?(\n  \])/m) do
@@ -125,29 +108,7 @@ def rewrite_cask(text, version:, sha256:, pkgutil: nil)
     text = rewritten
   end
 
-  File.write(CASK, text)
-end
-
-# 建临时目录；BOYA_KEEP_TMP=1 时保留并打印路径，便于排查
-def make_workdir
-  if ENV["BOYA_KEEP_TMP"] == "1"
-    dir = Dir.mktmpdir("update-boya")
-    log "BOYA_KEEP_TMP=1，保留临时目录 #{dir}"
-    dir
-  else
-    Dir.mktmpdir("update-boya")
-  end
-end
-
-# 清理临时目录。Dir.mktmpdir 在块退出时也会自行清理，故这里只处理"非块形式"的目录，
-# 并对已消失的路径静默处理（避免清理本身把成功的运行变成失败）。
-def cleanup(dir)
-  return if dir.nil? || ENV["BOYA_KEEP_TMP"] == "1"
-  return unless Dir.exist?(dir)
-
-  FileUtils.remove_entry(dir)
-rescue Errno::ENOENT
-  nil
+  CaskUpdate.rewrite_cask(CASK, text, version: version, sha256: sha256)
 end
 
 latest = fetch_latest_version
@@ -163,10 +124,10 @@ end
 
 url = "https://oss.boyamic.com/app/BOYACentral-#{latest}.pkg"
 
-workdir = make_workdir
+workdir = CaskUpdate.make_workdir("update-boya", keep_env: "BOYA_KEEP_TMP")
 begin
   pkg_path = File.join(workdir, "BOYACentral-#{latest}.pkg")
-  size = download(url, pkg_path)
+  size = CaskUpdate.download(url, pkg_path)
   log "下载完成 #{size} 字节"
 
   verify_apple_signature(pkg_path)
@@ -177,7 +138,7 @@ begin
   end
   log "包内 App 版本 #{info[:app_version]}（#{info[:bundle_id]}）与文件名一致"
 
-  sha256 = Digest::SHA256.file(pkg_path).hexdigest
+  sha256 = CaskUpdate.sha256_file(pkg_path)
   drifted = info[:identifiers].sort != cur[:pkgutil].sort
 
   if drifted
@@ -201,7 +162,7 @@ begin
     puts "pkgutil_actual=#{info[:identifiers].join(",")}"
   end
 ensure
-  cleanup(workdir)
+  CaskUpdate.cleanup(workdir, keep_env: "BOYA_KEEP_TMP")
 end
 
 exit 0

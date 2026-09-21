@@ -14,25 +14,27 @@
 #                → 计算 cask 所需的 sha256 → 精准替换 cask 的 version/sha256 两行
 #   4. 输出 new_version=… 供 workflow 判断是否开 PR
 #
+# 依赖：仅 Ruby 标准库，macOS / Linux 均可运行（CI 用 ubuntu runner）。
+#
 # 环境变量（本地调试用）：
 #   PIXSO_VERIFY=1  即使版本相同也强制下载并校验（不修改文件），用于本地验证全链路
+#   PIXSO_KEEP_TMP=1 保留临时目录，便于排查
 
+require_relative "lib/cask_update"
 require "yaml"
-require "open-uri"
 require "digest"
 require "base64"
 
 YML_URL = "https://api.pixso.cn/api/upgrade/desktop/bosyun/latest-mac.yml"
 CASK    = File.expand_path("../Casks/pixso.rb", __dir__)
-OPEN_OPTS = { read_timeout: 60 }.freeze
 
 def log(msg)
-  warn "[update-pixso] #{msg}"
+  CaskUpdate.log(msg)
 end
 
 # 从下载页抓取 yml 并解析；从 files 中取出 dmg 项（URL + 官方 sha512）
 def fetch_release
-  raw = URI.open(YML_URL, **OPEN_OPTS).read
+  raw = URI.open(YML_URL, read_timeout: 60).read
   # 用 YAML.load 而非 safe_load：yml 含 RFC3339 时间戳（releaseDate），
   # 会反序列化为 Time；Ruby 2.6 的 safe_load 类白名单严格（Time 被拒），
   # 而 YAML.load 在 2.6 完整加载、在 3.x 默认安全模式，均兼容 Time。
@@ -49,55 +51,41 @@ rescue StandardError => e
   raise "获取/解析 latest-mac.yml 失败: #{e.message}"
 end
 
-# 读当前 cask 中的 version / sha256
-def current_cask
-  text = File.read(CASK)
-  version = text[/version\s+"([^"]+)"/, 1]
-  sha256  = text[/sha256\s+"([^"]+)"/, 1]
-  raise "Casks/pixso.rb 解析失败" if version.nil? || sha256.nil?
-
-  { version: version, sha256: sha256, text: text }
-end
-
-# 下载 dmg → 校验 sha512(base64) → 返回 [dmg_bytes, sha256_hex]
-def download_and_verify(url, want_sha512_b64)
-  log "下载 #{url}"
-  body = URI.open(url, **OPEN_OPTS).read
-  actual = Base64.strict_encode64(Digest::SHA512.digest(body))
-  unless actual == want_sha512_b64
-    raise "sha512 校验失败: 期望 #{want_sha512_b64} 实际 #{actual}"
-  end
-
-  log "sha512 校验通过"
-  [body, Digest::SHA256.hexdigest(body)]
-end
-
-# 精准替换 cask 的 version / sha256 两行，不动其它内容
-def rewrite_cask(rel, text)
-  text = text.sub(/version\s+"([^"]+)"/) { %(version "#{rel[:version]}") }
-  text = text.sub(/sha256\s+"([^"]+)"/)  { %(sha256 "#{rel[:sha256]}") }
-  File.write(CASK, text)
-end
-
 rel = fetch_release
-cur = current_cask
+cur = CaskUpdate.read_cask(CASK)
 log "当前 #{cur[:version]} → 最新 #{rel[:version]}"
 
-if cur[:version] == rel[:version] && ENV["PIXSO_VERIFY"] != "1"
+verify_only = ENV["PIXSO_VERIFY"] == "1"
+if cur[:version] == rel[:version] && !verify_only
   puts "new_version="
   exit 0
 end
 
-body, sha256 = download_and_verify(rel[:url], rel[:sha512_b64])
+workdir = CaskUpdate.make_workdir("update-pixso", keep_env: "PIXSO_KEEP_TMP")
+begin
+  dmg_path = File.join(workdir, "Pixso-#{rel[:version]}.dmg")
+  size = CaskUpdate.download(rel[:url], dmg_path)
+  log "下载完成 #{size} 字节"
 
-if ENV["PIXSO_VERIFY"] == "1"
-  # 仅校验并打印，不修改文件（本地自检：应与当前 cask sha256 一致）
-  puts "new_version=#{rel[:version]} (verify)"
-  puts "sha256=#{sha256}"
-else
-  rewrite_cask(rel, cur[:text])
-  log "已更新 Casks/pixso.rb → #{rel[:version]} (sha256 #{sha256})"
-  puts "new_version=#{rel[:version]}"
+  # 用 yml 里官方给出的 sha512(base64) 校验完整性（防篡改/错发包）
+  actual_b64 = Base64.strict_encode64(Digest::SHA512.file(dmg_path).digest)
+  unless actual_b64 == rel[:sha512_b64]
+    raise "sha512 校验失败: 期望 #{rel[:sha512_b64]} 实际 #{actual_b64}"
+  end
+  log "sha512 校验通过"
+
+  sha256 = CaskUpdate.sha256_file(dmg_path)
+
+  if verify_only
+    puts "new_version=#{rel[:version]} (verify)"
+    puts "sha256=#{sha256}"
+  else
+    CaskUpdate.rewrite_cask(CASK, cur[:text], version: rel[:version], sha256: sha256)
+    log "已更新 Casks/pixso.rb → #{rel[:version]} (sha256 #{sha256})"
+    puts "new_version=#{rel[:version]}"
+  end
+ensure
+  CaskUpdate.cleanup(workdir, keep_env: "PIXSO_KEEP_TMP")
 end
 
 exit 0
