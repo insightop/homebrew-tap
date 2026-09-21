@@ -1,6 +1,6 @@
 cask "xianyu-seller-im" do
-  version "1.0.4"
-  sha256 "622efa8e10384aadcb7c6965e0b018359a194d48f476f5ed7b44df0bba4d826d"
+  version "1.2.0"
+  sha256 "3c16fdc3391f9f90a0ec3364b913e04cbe15d7854c35007f658bd2c739b66132"
 
   url "https://mtl.cn-hangzhou.oss.aliyun-inc.com/xianyu/seller/commonpro/xianyu-seller-im-#{version}-mac.dmg"
   name "闲鱼卖家客服"
@@ -8,8 +8,11 @@ cask "xianyu-seller-im" do
   desc "Customer service tool for Xianyu (Goofish) sellers"
   homepage "https://seller.goofish.com/"
 
+  # 官方无版本清单/接口（Electron 无 feed、OSS 不可列目录），livecheck 无法可靠探测：
+  # 卖家工作台 SPA 里写死的下载链接常年滞后（如 1.2.0 发布后仍指向 1.0.4），拿它当版本源会误判。
+  # 版本探测由 .github/workflows/update-casks.yml 调用 scripts/update-xianyu.rb 完成（OSS 文件名窗口扫描）。
   livecheck do
-    skip "Versioned URL with no public version feed"
+    skip "No version feed; checked by scripts/update-xianyu.rb"
   end
 
   depends_on arch: :arm64
