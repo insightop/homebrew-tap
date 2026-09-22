@@ -30,6 +30,7 @@ on:
           - all
           - boya-central
           - dsh-desktop
+          - mimo-desktop
           - pixso
           - xianyu-seller-im
 
@@ -67,6 +68,19 @@ jobs:
       needs_seven_zip: true
       source: GitHub Releases 的 `/releases/latest`（排除 prerelease）
       extra: 已核对包内 App 版本；资产改名时会自动同步修正 cask 的 url
+
+  mimo-desktop:
+    # 需 7-Zip 读 dmg（校验包内版本；版本来自官方 manifest.json）
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.cask == 'all' || github.event.inputs.cask == 'mimo-desktop' }}
+    uses: ./.github/workflows/update-cask.yml
+    with:
+      cask: mimo-desktop
+      script: scripts/update-mimo.rb
+      file: Casks/mimo-desktop.rb
+      runner: ubuntu-latest
+      needs_seven_zip: true
+      source: 官方发布清单 `mimocode-cdn.xiaomimimo.com/mimocode/mimodesktop/manifest.json`
+      extra: 已用清单自带的官方 sha256 校验，并核对包内 App 版本
 
   xianyu-seller-im:
     # 需 7-Zip 读 APFS dmg
