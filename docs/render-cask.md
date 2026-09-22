@@ -40,7 +40,7 @@
     homepage: <项目主页>      # 可选
 
 - name: 提交并推送
-  uses: stefanzweifel/git-auto-commit-action@v5
+  uses: stefanzweifel/git-auto-commit-action@v7
   with:
     repository: homebrew-tap
     commit_message: "chore: update <app> to <版本>"
