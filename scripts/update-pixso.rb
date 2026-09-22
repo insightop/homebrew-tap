@@ -35,11 +35,11 @@ end
 # 从下载页抓取 yml 并解析；从 files 中取出 dmg 项（URL + 官方 sha512）
 def fetch_release
   raw = URI.open(YML_URL, read_timeout: 60).read
-  # 用 YAML.load 而非 safe_load：yml 含 RFC3339 时间戳（releaseDate），
-  # 会反序列化为 Time；Ruby 2.6 的 safe_load 类白名单严格（Time 被拒），
-  # 而 YAML.load 在 2.6 完整加载、在 3.x 默认安全模式，均兼容 Time。
-  # 此 yml 为官方可信数据源，不存在未信任反序列化风险。
-  data = YAML.load(raw)
+  # 该 yml 含 RFC3339 时间戳（releaseDate），Psych 会将其反序列化为 Time。
+  # 必须显式放行 Time：Ruby 3.1+ 的 YAML.load 已等价于安全加载（类白名单为空），
+  # 会抛 Psych::DisallowedClass（CI 的 Ruby 3.3 上曾因此失败）。
+  # permitted_classes 在 Psych 3.1（macOS 自带 Ruby 2.6）与 5.x（CI Ruby 3.3）均可用。
+  data = YAML.safe_load(raw, permitted_classes: [Time])
   version = data["version"]
   raise "yml 无 version" if version.nil? || version.empty?
 
