@@ -57,7 +57,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3"
+          ruby-version: "4.0"
 
       # 需要 >= 22.00 的 7-Zip 才能读 APFS dmg。
       # 注意 Ubuntu 上 `p7zip-full` 是 transitional 包、实际依赖 `7zip`（23.01，提供 7z），
