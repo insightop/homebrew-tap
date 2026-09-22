@@ -22,7 +22,7 @@
 
 ```yaml
 - name: 检出 tap 仓库（含共享 render-cask action）
-  uses: actions/checkout@v4
+  uses: actions/checkout@v7
   with:
     repository: insightop/homebrew-tap
     token: ${{ secrets.HOMEBREW_TAP_PAT }}   # 需 contents 写权限
