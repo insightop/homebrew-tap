@@ -15,7 +15,7 @@ inputs:
     description: 安装包 sha256
     required: true
   url:
-    description: 完整下载 URL（verified 字段自动从 URL 提取）
+    description: 完整下载 URL
     required: true
   app-name:
     description: 应用显示名（name 字段；app 行渲染为 <app-name>.app）
@@ -44,16 +44,14 @@ runs:
         DESC="${{ inputs.desc }}"
         HOMEPAGE="${{ inputs.homepage }}"
 
-        # verified = 域名 + 目录前缀（Homebrew cask 规范：证明文件来自该站点）
-        VERIFIED="$(printf '%s' "${URL}" | sed -E 's#^https?://([^/]+)/(.*)/[^/]+$#\1/\2/#')"
-
+        # 不生成 `verified:` —— Homebrew 已废弃该参数（Cask::URL::DEPRECATED_URL_SPECS），
+        # 现在默认行为即校验下载来源，写入它只会触发废弃警告。
         {
           echo "cask \"${TOKEN}\" do"
           echo "  version \"${VERSION}\""
           echo "  sha256 \"${SHA256}\""
           echo ""
-          echo "  url \"${URL}\","
-          echo "      verified: \"${VERIFIED}\""
+          echo "  url \"${URL}\""
           echo "  name \"${APP_NAME}\""
           if [ -n "${DESC}" ]; then
             echo "  desc \"${DESC}\""
