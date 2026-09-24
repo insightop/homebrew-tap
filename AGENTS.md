@@ -21,7 +21,8 @@ Casks/                          # 每个 cask 一个文件，文件名即 token
 ├── studio.rb                   # 自有，latest 模式
 ├── xianyu-seller-im.rb         # 第三方，自动检测
 ├── boya-central.rb             # 第三方，自动检测
-├── dsh-desktop.rb              # 第三方，自动检测
+├── dsh-desktop.rb              # 第三方（社区版，anywhere-labs），自动检测
+├── deepseek-harness.rb         # 第三方（DeepSeek 官方），无探测脚本，人工跟进
 ├── pixso.rb                    # 第三方，自动检测
 └── mimo-desktop.rb             # 第三方，自动检测
 
@@ -166,6 +167,7 @@ spctl -a -vvv -t exec /Applications/Xxx.app
 | `boya-central` | 已公证（pkg） | 不需要 |
 | `pixso` | 已公证 | 不需要 |
 | `mimo-desktop` | 已公证 | 不需要 |
+| `deepseek-harness` | 已公证（Developer ID: Hangzhou DeepSeek） | 不需要 |
 
 > 清 quarantine 只去掉下载来源的隔离标记，**不影响代码签名校验**（`codesign --verify` 仍通过）；
 > 它解决的是「未公证导致的首次启动弹窗」，不是绕过签名验证。
