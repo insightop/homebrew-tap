@@ -29,7 +29,6 @@ on:
         options:
           - all
           - boya-central
-          - dsh-desktop
           - mimo-desktop
           - pixso
           - xianyu-seller-im
@@ -55,19 +54,6 @@ jobs:
       runner: ubuntu-latest
       source: 官方 electron-updater 通道 `api.pixso.cn/api/upgrade/desktop/bosyun/latest-mac.yml`
       extra: 已用官方 sha512 校验安装包完整性
-
-  dsh-desktop:
-    # 需 7-Zip 读 dmg；版本来自 GitHub API，无需 macOS 命令
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.cask == 'all' || github.event.inputs.cask == 'dsh-desktop' }}
-    uses: ./.github/workflows/update-cask.yml
-    with:
-      cask: dsh-desktop
-      script: scripts/update-dsh.rb
-      file: Casks/dsh-desktop.rb
-      runner: ubuntu-latest
-      needs_seven_zip: true
-      source: GitHub Releases 的 `/releases/latest`（排除 prerelease）
-      extra: 已核对包内 App 版本；资产改名时会自动同步修正 cask 的 url
 
   mimo-desktop:
     # 需 7-Zip 读 dmg（校验包内版本；版本来自官方 manifest.json）

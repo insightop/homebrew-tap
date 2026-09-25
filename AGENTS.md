@@ -21,7 +21,6 @@ Casks/                          # 每个 cask 一个文件，文件名即 token
 ├── studio.rb                   # 自有，latest 模式
 ├── xianyu-seller-im.rb         # 第三方，自动检测
 ├── boya-central.rb             # 第三方，自动检测
-├── dsh-desktop.rb              # 第三方（社区版，anywhere-labs），自动检测
 ├── deepseek-harness.rb         # 第三方（DeepSeek 官方），无探测脚本，人工跟进
 ├── pixso.rb                    # 第三方，自动检测
 └── mimo-desktop.rb             # 第三方，自动检测
@@ -48,7 +47,6 @@ brew livecheck --tap insightop/tap
 
 # 本地自检单个探测脚本（强制全链路下载校验，不修改文件）
 PIXSO_VERIFY=1  ruby scripts/update-pixso.rb
-DSH_VERIFY=1    ruby scripts/update-dsh.rb
 XIANYU_VERIFY=1 ruby scripts/update-xianyu.rb
 MIMO_VERIFY=1   ruby scripts/update-mimo.rb
 BOYA_VERIFY=1   ruby scripts/update-boya.rb    # 仅 macOS
@@ -85,7 +83,6 @@ brew audit --cask --strict <token>
 | cask | runner | 7-Zip | 原因 |
 | --- | --- | --- | --- |
 | `pixso` | ubuntu | — | 纯 Ruby |
-| `dsh-desktop` | ubuntu | ✅ | 7-Zip 读 dmg |
 | `mimo-desktop` | ubuntu | ✅ | 7-Zip 读 dmg |
 | `xianyu-seller-im` | ubuntu | ✅ | 7-Zip 读 dmg（**APFS**） |
 | `boya-central` | **macOS** | — | pkg 签名/公证校验依赖 `pkgutil --check-signature`、`spctl`（macOS 专有） |
@@ -99,13 +96,11 @@ brew audit --cask --strict <token>
 - 无新版时脚本安静退出（输出空的 `new_version=`），workflow 不开 PR。
 - 只开 PR，**不自动推送 main**；main 由人工合并。
 - 分支名 `ci/<cask>-<version>`，已存在则复用（避免重复 PR）。
-- 探测到上游「标识漂移」时（如 BOYA 的 pkgutil、DSH 的资产改名），脚本会自动同步修正
+- 探测到上游「标识漂移」时（如 BOYA 的 pkgutil 变更），脚本会自动同步修正
   并在 PR 描述里高亮，提示人工重点复核。
 
 ## 各 cask 的探测要点与风险
 
-- **dsh-desktop**：GitHub Releases，用 `:github_latest` 策略读 `/releases/latest`，**天然排除 prerelease**——上游同时发正式版与 `*-beta.1`（如 v2.0.13 与 v2.0.13-beta.1），用默认 Git 策略可能把 beta 当成新版本。
-  风险是上游**发布资产改名**：真实发生过一次（v2.0.0 的 `DSH-Desktop-<v>-arm64.dmg` → v2.0.1 起的 `DSH.Desktop-<v>-universal.dmg`，仓库也从 `deepseek-harness-desktop` 更名为 `dsh-desktop`）。脚本不硬编码资产名，而是从 release 资产列表动态选取并反推 `url` 模板，改名时自动同步修正并在 PR 描述里高亮。
 - **boya-central**：官网页面直出 `BOYACentral-<version>.pkg`，一个正则即可。风险是页面改版导致失配——失配会**显式报错**而非静默返回旧版本。
   脚本升级时还会校验 Apple 签名与公证、比对包内 App 版本；若上游 **pkg 标识漂移**（真实发生过：1.1.x 的 `com.boyaCentral.BOYA.*` → 1.2.4 的 `com.ccncv.boya.central` / `com.jiayz.virtualaudiodriver`），会自动改写 `uninstall pkgutil` 并在 PR 描述里高亮。
 - **xianyu-seller-im**：该 App 无更新 feed、OSS 不可列目录、卖家工作台 SPA 里写死的链接常年滞后（1.2.0 发布后仍指向 1.0.4），因此改为对确定性文件名做存在性探测，并要求 **mac 包与 win 包同时存在**才认定为正式发布。
@@ -116,7 +111,7 @@ brew audit --cask --strict <token>
 
 ## 共享库 `scripts/lib/cask_update.rb`
 
-五个探测脚本共用，避免重复实现：
+四个探测脚本共用，避免重复实现：
 
 - 7-Zip 定位与版本校验（≥ 22.00；优先 `7zz`，兼容 `7z`）
 - XML plist 解析（用 REXML，**不依赖 macOS 的 `plutil`**）
@@ -127,7 +122,7 @@ brew audit --cask --strict <token>
 跨平台注意点（都已踩过坑）：
 
 - `7z e -so` 抽取 dmg 内文件时，APFS 资源分支字节会紧跟 `</plist>`，需按 `</plist>` 截断再解析。
-- dmg 内 app 可能在根目录（闲鱼）或一层子目录内（dsh、mimo），匹配时允许一层前缀。
+- dmg 内 app 可能在根目录（闲鱼）或一层子目录内（mimo），匹配时允许一层前缀。
 - 7-Zip 版本号解析不能被 `[64]` 这类架构标记干扰（否则会静默放行过旧版本）。
 
 ## 未公证 App 的 Gatekeeper 处理
@@ -163,7 +158,6 @@ spctl -a -vvv -t exec /Applications/Xxx.app
 | --- | --- | --- |
 | `studio` | 未公证 | 已有 `postflight_steps` |
 | `xianyu-seller-im` | 未公证 | 已有 `postflight_steps` |
-| `dsh-desktop` | 已公证 | 不需要 |
 | `boya-central` | 已公证（pkg） | 不需要 |
 | `pixso` | 已公证 | 不需要 |
 | `mimo-desktop` | 已公证 | 不需要 |

@@ -91,7 +91,7 @@ module CaskUpdate
     list, status = Open3.capture2e(bin, "l", "-slt", dmg_path)
     raise "7z 列出 #{File.basename(dmg_path)} 失败: #{list[0, 300]}" unless status.success?
 
-    # app 可能在根目录（闲鱼），也可能位于一个顶层子目录内（dsh 为
+    # app 可能在根目录（闲鱼），也可能位于一个顶层子目录内（mimo 为
     # "<App> <version>-<arch>/<App>.app/..."）。因此允许最多一层目录前缀。
     # 用 [^/]+ 限定每段不含斜杠，可自然排除 Frameworks 里嵌套的 Helper.app。
     candidates = list.scan(/^Path = (.+)$/).flatten
