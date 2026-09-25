@@ -26,7 +26,7 @@ brew upgrade --cask xianyu-seller-im boya-central deepseek-harness pixso mimo-de
 | `studio` | Studio | Insightop 自研桌面端 |
 | `xianyu-seller-im` | 闲鱼卖家客服 | 闲鱼商家客服客户端（仅 Apple Silicon） |
 | `boya-central` | BOYA Central | 博雅麦克风桌面端，含 CoreAudio 驱动 |
-| `deepseek-harness` | DeepSeek Harness | DeepSeek 官方桌面客户端（仅 Apple Silicon） |
+| `deepseek-harness` | DeepSeek Harness | DeepSeek 官方桌面客户端（仅 Apple Silicon，RC 阶段） |
 | `pixso` | Pixso | 博思云创协同设计工具 |
 | `mimo-desktop` | Xiaomi MiMo | 小米 MiMo 桌面端（仅 Apple Silicon） |
 
