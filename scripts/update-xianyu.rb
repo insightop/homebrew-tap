@@ -18,9 +18,9 @@
 #              → 计算 cask 所需的 sha256
 #   5. 精准替换 cask 的 version/sha256 两行，输出 new_version=… 供 workflow 开 PR
 #
-# 依赖：仅 Ruby 标准库 + 7-Zip（读 dmg，需 >= 22.00；见 scripts/lib/cask_update.rb）。
-#   Ubuntu: apt-get install -y 7zip   /  macOS: brew install sevenzip
-#   故本脚本在 macOS 与 Linux 上均可运行，CI 用 ubuntu runner。
+# 依赖：仅 Ruby 标准库 + 7-Zip（读 dmg，版本要求见 scripts/lib/cask_update.rb）。
+#   Ubuntu runner 自带   /   macOS: brew install sevenzip
+#   故本脚本在 macOS 与 Linux 上均可运行，CI 用 ubuntu-26.04。
 #
 # 环境变量（本地调试用）：
 #   XIANYU_VERIFY=1    即使版本相同也强制下载并校验（不修改文件），用于本地验证全链路

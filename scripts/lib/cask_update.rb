@@ -6,10 +6,11 @@
 # （GitHub Actions 的 ubuntu runner，成本更低且足够），因此不依赖 macOS 专有命令。
 #
 # 关于 dmg 解析：
-#   macOS 有 hdiutil，Linux 没有。7-Zip 自 22.00 起支持 APFS，可跨平台读取 dmg
-#   并直接抽取内部文件，故统一用 7-Zip，避免两套实现。
-#   注意：Ubuntu 24.04 自带的 p7zip 是 16.02（不支持 APFS），必须用 apt 的
-#   `7zip` 包（23.01）或更新版本；macOS 上 `brew install sevenzip` 提供 `7zz`。
+#   macOS 有 hdiutil，Linux 没有。7-Zip 可跨平台读取 dmg 并直接抽取内部文件，
+#   故统一用 7-Zip，避免两套实现。
+#   读 dmg 对 7-Zip 版本有要求：读 APFS 自 22.00 起，读 XZ(ULMO) 压缩的 dmg 自 24.01 起。
+#   本仓库不再安装/校验 7-Zip，改由 runner 镜像保证 —— ubuntu-26.04 自带 7zip 26.00；
+#   macOS 上 `brew install sevenzip` 提供 `7zz`。
 #
 # 关于 plist 解析：
 #   不依赖 macOS 的 plutil，改用 Ruby 标准库（REXML）直接解析 XML plist。
@@ -30,27 +31,16 @@ module CaskUpdate
   # ---- 7-Zip 定位 --------------------------------------------------------
 
   # 找到可用的 7-Zip 可执行文件。
-  # Ubuntu 24.04 的 apt `7zip` 装的是 `7zz`；p7zip 装的是 `7z`（16.02，不支持 APFS）。
-  # 因此优先 7zz，其次 7z，并在版本过低时明确报错而非静默失败。
+  # 优先 7zz（官方静态包），其次 7z（apt 的 `7zip` / p7zip），最后 7za。
+  # 版本由 runner 镜像保证（见文件头），这里只定位、只记录，不做硬性校验。
   def seven_zip_bin
     @seven_zip_bin ||= begin
       bin = %w[7zz 7z 7za].find { |c| system("command -v #{c} >/dev/null 2>&1") }
-      raise "未找到 7-Zip（7zz/7z）。Ubuntu 请 `apt-get install -y 7zip`；macOS 请 `brew install sevenzip`" if bin.nil?
+      raise "未找到 7-Zip（7zz/7z）。ubuntu runner 自带；macOS 请 `brew install sevenzip`" if bin.nil?
 
-      # p7zip 会先打印架构标记（如 "7-Zip [64] 17.05"），故先从含 7-Zip 的那一行里
-      # 取第一个 x.y 形式的数字，避免误匹配版权年份等信息。
+      # 只记录不校验：万一 dmg 读不出来，这行日志（如 "使用 7-Zip: 7z 23.01"）就是第一手线索
       banner = `#{bin} 2>&1`
-      line = banner.lines.find { |l| l.include?("7-Zip") } || banner
-      version = line[/\b(\d+\.\d+)\b/, 1]
-      if version.nil?
-        raise "无法识别 7-Zip 版本（#{bin} 输出异常）: #{banner[0, 120].inspect}"
-      end
-      if Gem::Version.new(version) < Gem::Version.new("24.00")
-        raise "7-Zip #{version} 过旧（读取 APFS dmg 需 >= 24.00）。" \
-              "Ubuntu 请装 apt 的 `7zip`（23.01），勿用 `p7zip-full`（16.02）"
-      end
-
-      log "使用 7-Zip: #{bin} #{version}"
+      log "使用 7-Zip: #{bin} #{banner[/[0-9]+\.[0-9]+/] || 'unknown'}"
       bin
     end
   end

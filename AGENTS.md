@@ -74,24 +74,25 @@ brew audit --cask --strict <token>
 | `cask` | 是 | cask token |
 | `script` | 是 | 探测脚本路径 |
 | `file` | 是 | 待更新的 cask 文件路径 |
-| `runner` | 是 | `ubuntu-latest` 或 `macos-latest` |
+| `runner` | 是 | 如 `ubuntu-26.04`（读 dmg）/ `ubuntu-latest` / `macos-latest` |
 | `source` | 是 | PR 描述里的版本来源（人可读） |
 | `extra` | 否 | PR 描述里的补充校验说明 |
-| `needs_seven_zip` | 否 | 是否需安装 7-Zip ≥ 22（读 dmg） |
 
 **runner 分配原则：能做到的用 ubuntu，有平台限制的才用 macOS。**
 
 | cask | runner | 7-Zip | 原因 |
 | --- | --- | --- | --- |
-| `pixso` | ubuntu | — | 纯 Ruby |
-| `deepseek-harness` | ubuntu | ✅ | 7-Zip 读 dmg（核对包内版本） |
-| `mimo-desktop` | ubuntu | ✅ | 7-Zip 读 dmg |
-| `xianyu-seller-im` | ubuntu | ✅ | 7-Zip 读 dmg（**APFS**） |
-| `boya-central` | **macOS** | — | pkg 签名/公证校验依赖 `pkgutil --check-signature`、`spctl`（macOS 专有） |
+| `pixso` | ubuntu-latest | — | 纯 Ruby，不读 dmg |
+| `deepseek-harness` | **ubuntu-26.04** | 镜像自带 | 7-Zip 读 dmg（核对包内版本） |
+| `mimo-desktop` | **ubuntu-26.04** | 镜像自带 | 7-Zip 读 dmg |
+| `xianyu-seller-im` | **ubuntu-26.04** | 镜像自带 | 7-Zip 读 dmg（**APFS**） |
+| `boya-central` | **macos-latest** | — | pkg 签名/公证校验依赖 `pkgutil --check-signature`、`spctl`（macOS 专有） |
 
-**7-Zip 版本要求**：读 dmg 需 **≥ 22.00**（自 22.00 起支持 APFS）。Ubuntu 上装 apt 的 `7zip`（23.01）；
-**勿依赖 `p7zip-full`**——它在 Ubuntu 24.04 是 transitional 包，且旧版 16.02 读不了 APFS。
-脚本会校验版本，不合格即显式报错。
+**7-Zip 版本要求**：读 dmg 需支持 APFS（≥ 22.00）与 XZ(ULMO) 压缩（≥ 24.01）——上游已出现后者。
+故读 dmg 的 job 钉 **`ubuntu-26.04`**（镜像自带 `7zip` **26.00**）；`ubuntu-latest` 现仍为 24.04，只带 23.01，
+会读不出包内版本，症状是「dmg 内未找到顶层 .app」这类**误导性报错**（真因是压缩算法而非包结构）。
+workflow **不再安装/校验 7-Zip**：脚本只打印实际版本（`使用 7-Zip: …`）作为排查线索；
+本机 macOS 用 `brew install sevenzip`。
 
 ### 约定
 
@@ -126,7 +127,7 @@ brew audit --cask --strict <token>
 
 五个探测脚本共用，避免重复实现：
 
-- 7-Zip 定位与版本校验（≥ 24.00；优先 `7zz`，兼容 `7z`）
+- 7-Zip 定位（优先 `7zz`；**不校验版本**，版本要求见上节）
 - XML plist 解析（用 REXML，**不依赖 macOS 的 `plutil`**）
 - dmg 内顶层 App 版本读取（用 7-Zip 流式抽取，**不依赖 `hdiutil`**）
 - cask 的 `version` / `sha256` / `url` 读写
@@ -136,7 +137,8 @@ brew audit --cask --strict <token>
 
 - `7z e -so` 抽取 dmg 内文件时，APFS 资源分支字节会紧跟 `</plist>`，需按 `</plist>` 截断再解析。
 - dmg 内 app 可能在根目录（闲鱼）或一层子目录内（mimo），匹配时允许一层前缀。
-- 7-Zip 版本号解析不能被 `[64]` 这类架构标记干扰（否则会静默放行过旧版本）。
+- dmg 读不出内容时，先看脚本打印的 `使用 7-Zip: …`：7-Zip 过旧只会列出分区条目，
+  而报错信息（「未找到顶层 .app/Contents/Info.plist」）看起来像是包结构变了，容易误判。
 
 ## 未公证 App 的 Gatekeeper 处理
 
@@ -190,7 +192,7 @@ spctl -a -vvv -t exec /Applications/Xxx.app
 4. 写 `Casks/<token>.rb`，`livecheck` 用真实可用的源；若上游确实没有版本源，
    显式 `skip` 并注明替代检测方式。
 5. 若有自动化，加 `scripts/update-<cask>.rb`（复用 `scripts/lib/cask_update.rb`），
-   并在 `.github/workflows/update-casks.yml` 加一个 job（选 runner 与 `needs_seven_zip`）。
+   并在 `.github/workflows/update-casks.yml` 加一个 job（选 runner；读 dmg 的用 `ubuntu-26.04`）。
 6. 验证：`brew livecheck`、伪造旧版本跑一次 upgrade 路径、`brew audit --cask --strict`、
    最好再做一次真实 `brew install`。
 7. 更新 `README.md` 的 cask 表与本文件的对应章节。
