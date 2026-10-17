@@ -126,7 +126,7 @@ brew audit --cask --strict <token>
 
 五个探测脚本共用，避免重复实现：
 
-- 7-Zip 定位与版本校验（≥ 22.00；优先 `7zz`，兼容 `7z`）
+- 7-Zip 定位与版本校验（≥ 24.00；优先 `7zz`，兼容 `7z`）
 - XML plist 解析（用 REXML，**不依赖 macOS 的 `plutil`**）
 - dmg 内顶层 App 版本读取（用 7-Zip 流式抽取，**不依赖 `hdiutil`**）
 - cask 的 `version` / `sha256` / `url` 读写

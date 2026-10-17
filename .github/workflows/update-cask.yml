@@ -59,10 +59,10 @@ jobs:
         with:
           ruby-version: "4.0"
 
-      # 需要 >= 22.00 的 7-Zip 才能读 APFS dmg。
+      # 需要 >= 24.00 的 7-Zip 才能读 APFS dmg。
       # 注意 Ubuntu 上 `p7zip-full` 是 transitional 包、实际依赖 `7zip`（23.01，提供 7z），
       # 但也可能残留仅 16.02 的 p7zip，故这里统一校验版本，不合格就装 `7zip`。
-      - name: Ensure 7-Zip >= 22.00
+      - name: Ensure 7-Zip >= 24.00
         if: inputs.needs_seven_zip
         run: |
           set -euo pipefail
@@ -74,18 +74,18 @@ jobs:
               v="$("$c" 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
               [[ -n "$v" ]] || continue
               # 用 Ruby 比较版本（macOS/Linux 通用；dpkg 仅 Linux 有）
-              if ruby -e 'exit(Gem::Version.new(ARGV[0]) >= Gem::Version.new("22.00") ? 0 : 1)' "$v"; then
+              if ruby -e 'exit(Gem::Version.new(ARGV[0]) >= Gem::Version.new("24.00") ? 0 : 1)' "$v"; then
                 echo "可用: $c $v"
                 return 0
               fi
-              echo "跳过 $c：版本 $v 过旧（读 APFS dmg 需 >= 22.00）"
+              echo "跳过 $c：版本 $v 过旧（读 APFS dmg 需 >= 24.00）"
             done
             return 1
           }
           if seven_zip_ok; then
             exit 0
           fi
-          echo "未找到 >= 22.00 的 7-Zip，安装 apt 的 7zip ..."
+          echo "未找到 >= 24.00 的 7-Zip，安装 apt 的 7zip ..."
           sudo apt-get update -qq
           sudo apt-get install -y -qq 7zip
           seven_zip_ok || { echo "安装后仍不满足，请检查 runner 镜像"; exit 1; }

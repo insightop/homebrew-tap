@@ -45,8 +45,8 @@ module CaskUpdate
       if version.nil?
         raise "无法识别 7-Zip 版本（#{bin} 输出异常）: #{banner[0, 120].inspect}"
       end
-      if Gem::Version.new(version) < Gem::Version.new("22.00")
-        raise "7-Zip #{version} 过旧（读取 APFS dmg 需 >= 22.00）。" \
+      if Gem::Version.new(version) < Gem::Version.new("24.00")
+        raise "7-Zip #{version} 过旧（读取 APFS dmg 需 >= 24.00）。" \
               "Ubuntu 请装 apt 的 `7zip`（23.01），勿用 `p7zip-full`（16.02）"
       end
 
