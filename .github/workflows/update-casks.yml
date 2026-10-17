@@ -9,7 +9,7 @@ name: Update Casks
 #
 # runner 分配原则：能做到的用 ubuntu，有平台限制的才用 macos。
 #   pixso                                    → ubuntu-latest（纯 Ruby，不读 dmg）
-#   读 dmg 的三个（mimo / xianyu / deepseek）→ ubuntu-26.04（镜像自带 7zip 26.00；
+#   读 dmg 的三个（mimo / xianyu）→ ubuntu-26.04（镜像自带 7zip 26.00；
 #     读 APFS 需 >= 22.00、读 XZ(ULMO) 压缩的 dmg 需 >= 24.01，而 ubuntu-latest 现为 24.04，只带 23.01）
 #   boya                                     → macos-latest（签名/公证校验依赖 pkgutil、spctl，macOS 专有）
 # 本仓库为 public，两类标准 runner 均免费。
@@ -34,7 +34,6 @@ on:
         options:
           - all
           - boya-central
-          - deepseek-harness
           - mimo-desktop
           - pixso
           - xianyu-seller-im
@@ -84,19 +83,6 @@ jobs:
       runner: ubuntu-26.04
       source: 官方 OSS 分发目录的文件名探测（该 App 无版本清单/更新接口）
       extra: 已核对包内 App 版本（mac 与 win 包需成对存在才认定为正式发布）
-
-  deepseek-harness:
-    # 需 7-Zip 读 dmg（校验包内版本；版本来自官方 electron-updater feed）
-    # 注意：官方目前只有 nightly channel（RC 阶段），版本可能频繁变动
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.cask == 'all' || github.event.inputs.cask == 'deepseek-harness' }}
-    uses: ./.github/workflows/update-cask.yml
-    with:
-      cask: deepseek-harness
-      script: scripts/update-deepseek.rb
-      file: Casks/deepseek-harness.rb
-      runner: ubuntu-26.04
-      source: 官方 electron-updater feed `download.deepseek.com/dsh-desk/feeds/mac-arm64/nightly-mac.yml`
-      extra: dmg 由 feed 版本号构造（feed 只提供 .zip），已自算 sha256 并核对包内 App 版本
 
   boya-central:
     # 必须 macOS：pkg 签名与公证校验依赖 pkgutil / spctl（macOS 专有）

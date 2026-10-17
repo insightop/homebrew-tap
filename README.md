@@ -6,7 +6,7 @@ Insightop 组织自有 Homebrew tap，分发桌面应用的安装包（cask）�
 
 ```bash
 brew tap insightop/tap
-brew install studio xianyu-seller-im boya-central deepseek-harness pixso mimo-desktop
+brew install studio xianyu-seller-im boya-central  pixso mimo-desktop
 ```
 
 ## 更新
@@ -16,7 +16,7 @@ brew install studio xianyu-seller-im boya-central deepseek-harness pixso mimo-de
 brew upgrade --cask --greedy studio
 
 # 固定版本模式（其余 cask：普通升级语义）
-brew upgrade --cask xianyu-seller-im boya-central deepseek-harness pixso mimo-desktop
+brew upgrade --cask xianyu-seller-im boya-central  pixso mimo-desktop
 ```
 
 ## 可用 cask
@@ -26,7 +26,6 @@ brew upgrade --cask xianyu-seller-im boya-central deepseek-harness pixso mimo-de
 | `studio` | Studio | Insightop 自研桌面端 |
 | `xianyu-seller-im` | 闲鱼卖家客服 | 闲鱼商家客服客户端（仅 Apple Silicon） |
 | `boya-central` | BOYA Central | 博雅麦克风桌面端，含 CoreAudio 驱动 |
-| `deepseek-harness` | DeepSeek Harness | DeepSeek 官方桌面客户端（仅 Apple Silicon，RC 阶段） |
 | `pixso` | Pixso | 博思云创协同设计工具 |
 | `mimo-desktop` | Xiaomi MiMo | 小米 MiMo 桌面端（仅 Apple Silicon） |
 

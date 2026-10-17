@@ -21,7 +21,6 @@ Casks/                          # 每个 cask 一个文件，文件名即 token
 ├── studio.rb                   # 自有，latest 模式
 ├── xianyu-seller-im.rb         # 第三方，自动检测
 ├── boya-central.rb             # 第三方，自动检测
-├── deepseek-harness.rb         # 第三方（DeepSeek 官方），自动检测
 ├── pixso.rb                    # 第三方，自动检测
 └── mimo-desktop.rb             # 第三方，自动检测
 
@@ -49,7 +48,6 @@ brew livecheck --tap insightop/tap
 PIXSO_VERIFY=1    ruby scripts/update-pixso.rb
 XIANYU_VERIFY=1   ruby scripts/update-xianyu.rb
 MIMO_VERIFY=1     ruby scripts/update-mimo.rb
-DEEPSEEK_VERIFY=1 ruby scripts/update-deepseek.rb
 BOYA_VERIFY=1     ruby scripts/update-boya.rb    # 仅 macOS
 
 # 语法与 workflow 校验
@@ -83,7 +81,6 @@ brew audit --cask --strict <token>
 | cask | runner | 7-Zip | 原因 |
 | --- | --- | --- | --- |
 | `pixso` | ubuntu-latest | — | 纯 Ruby，不读 dmg |
-| `deepseek-harness` | **ubuntu-26.04** | 镜像自带 | 7-Zip 读 dmg（核对包内版本） |
 | `mimo-desktop` | **ubuntu-26.04** | 镜像自带 | 7-Zip 读 dmg |
 | `xianyu-seller-im` | **ubuntu-26.04** | 镜像自带 | 7-Zip 读 dmg（**APFS**） |
 | `boya-central` | **macos-latest** | — | pkg 签名/公证校验依赖 `pkgutil --check-signature`、`spctl`（macOS 专有） |
@@ -111,17 +108,6 @@ workflow **不再安装/校验 7-Zip**：脚本只打印实际版本（`使用 7
 - **mimo-desktop**：官方发布 manifest 是结构化 JSON，`platforms["mac-arm64"]` 直接给出**版本化 dmg 地址 + 官方 sha256**，故用 `:json` 策略取版本，脚本再拿官方 sha256 校验包并核对包内版本。这是本仓库里数据源质量最好的一类（不必自行推算校验值）。
   上游同时提供固定 URL（`XiaomiMiMo-latest-arm64.dmg`）；本 cask 刻意用版本化 URL 以便固定校验。脚本**要求 manifest 的 url 必须含版本号**，若上游某天改成只给 latest 链接，会显式报错而非静默写入不可复现的 URL。
   该 App 内置 electron-updater（`app-update.yml` 指向同目录 generic provider），但顶层 `latest-mac.yml` 为 404、实际 feed 在带版本号的子目录且指向 `.zip`，故未采用该通道。
-- **deepseek-harness**：版本源自 App 内置的 electron-updater 配置
-  （`Contents/Resources/app-update.yml` 里的 `provider: generic` + `channel: nightly`），
-  即 `download.deepseek.com/dsh-desk/feeds/mac-arm64/nightly-mac.yml`。
-  **关键坑**：feed 的 `files[].url` 只提供 **`.zip`**（electron-updater 增量更新用）且只给该 zip 的 sha512；
-  而本 cask 需要 `.dmg` 且二者哈希不同（实测不同），故脚本**由 feed 的 `version` 确定性构造 dmg URL**
-  （`.../bin/mac-arm64/deepseek-harness-<version>-mac-arm64.dmg`），下载后**自行计算 sha256**，
-  再读包内 App 版本与 feed 声明交叉核对（防错发包）。
-  风险：①官方**目前只有 nightly channel**（`stable-mac.yml`/`latest-mac.yml` 均 404），
-  处于 RC 阶段，版本可能频繁变动（每天定时触发会开 PR，介意可改频率）；
-  ②若上游改变文件名规则（rc1 带日期戳 `0.1.7-rc.1.20260924.1`，rc2 起为纯 `0.1.7-rc.2`），
-  构造出的 URL 会 404 并**显式报错**，不会静默写坏 cask。
 
 ## 共享库 `scripts/lib/cask_update.rb`
 
@@ -176,7 +162,6 @@ spctl -a -vvv -t exec /Applications/Xxx.app
 | `boya-central` | 已公证（pkg） | 不需要 |
 | `pixso` | 已公证 | 不需要 |
 | `mimo-desktop` | 已公证 | 不需要 |
-| `deepseek-harness` | 已公证（Developer ID: Hangzhou DeepSeek） | 不需要 |
 
 > 清 quarantine 只去掉下载来源的隔离标记，**不影响代码签名校验**（`codesign --verify` 仍通过）；
 > 它解决的是「未公证导致的首次启动弹窗」，不是绕过签名验证。
