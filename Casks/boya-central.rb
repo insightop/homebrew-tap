@@ -1,6 +1,6 @@
 cask "boya-central" do
-  version "1.2.4"
-  sha256 "087fbf88f3f9741be8f574ad3a647ae6f5602753f85fcb23f04ea47a8ccb9e07"
+  version "1.2.5"
+  sha256 "bff77bf55ce825abf741681abfbe1e90859681b1c84cfdf99eec5816ba2f08ac"
 
   url "https://oss.boyamic.com/app/BOYACentral-#{version}.pkg"
   name "BOYA Central"
