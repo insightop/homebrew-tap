@@ -1,6 +1,6 @@
 cask "pixso" do
-  version "2.3.3"
-  sha256 "783f321472eac943c80bdefbe5cf43239c63c3c55643891717ac78eed3feef9b"
+  version "2.3.4"
+  sha256 "8398bfe4d80ad56853d576ab7b1c41bb8b014da836950a08efc5fe0e2b14f778"
 
   url "https://pixso-pub-prod.obs.cn-east-3.myhuaweicloud.com/cms/download/package/app/bosyun/#{version}/Pixso_mac_v#{version.gsub(".", "_")}.dmg"
   name "Pixso"
