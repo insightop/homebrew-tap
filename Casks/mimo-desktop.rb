@@ -1,6 +1,6 @@
 cask "mimo-desktop" do
-  version "26.1120.201429"
-  sha256 "e4c5d448852d5ed3270df3f990edd9f68deb81647f6f1a7a81f8e17e72cba810"
+  version "26.1126.261408"
+  sha256 "1c2885c842fcdeedfb22732bba85a32c349e7b9888d02006b44675f9525bff8d"
 
   # 官方同时提供固定 URL（XiaomiMiMo-latest-arm64.dmg）与版本化 URL；
   # 用版本化 URL，以便 sha256 固定校验与版本追踪。版本号形如 26.922.220226。
